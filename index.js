@@ -4,7 +4,7 @@ var http = require("http"),
 
 module.exports = function(options, cb){
 	if(typeof options === "string"){
-		options = { uri: options };
+		options = { uri: url.parse(options) };
 	}
 	return new Request(options, cb);
 };
@@ -36,68 +36,43 @@ module.exports.addProtocol = function(name, module){
 *	timeout: a request times out if it passes this limit. Defaults to 10000 (read: 10 seconds)
 */
 
+var re_protocol = /^https?:/; //TODO: what about other protocols?
+
 var Request = function(options, cb){
 	this._options = options;
+	this._cb = cb;
+	
 	this._ended = false;
+	this._redirected = 0;
 	this._resp = null;
 	this.response = null;
-	
-	this._cb = cb;
 	this._body = "";
 	
-	this._createRequest(options);
-	if(!this._request) return;
+	this.writable = options.uri.method === "POST" || options.uri.method === "PUT";
+	
+	this._addListeners();
 	
 	var scope = this;
-	
-	this.on("error", function(err){
-		scope._cb(err);
-	}).on("end", function(){
-		scope._cb(null, scope._headers, scope._body);
-	}).on("data", function(chunk){
-		if(!scope._written) scope._written = true;
-		scope._body += chunk;
-	});
-	
-	if(options.body) this._request.write(options.body);
-	
-	this.writable = options.uri.method === "POST" || options.uri.method === "PUT";
-	this._prepareClose();
-	
-	if(!this.writable){
-		this._request.end();
-	}
-	else{
-		if(options.body){
-			this._request.write(options.body);
+	process.nextTick(function(){
+		if(!scope._createRequest(options)) return;
+		if(!scope.writable) scope._request.end();
+		else{
+			if(options.body) scope._request.write(options.body);
+			scope._prepareClose();
 		}
-		this.once("pipe", function(src){
-			if(!scope.writable){
-				scope.emit("error", Error("Can't write to socket!"));
-				return;
-			}
-			scope._close = false;
-			var cb = function(){
-				scope._prepareClose();
-			};
-			src.on("end", cb);
-			src.on("close", cb);
-			
-			scope.on("pipe", function(){
-				throw Error("There is already a pipe");
-			});
-		});
-	}
+	});
 };
 
 var Stream = require("stream").Stream;
 require("util").inherits(Request, Stream);
 
+Request.prototype.readable = true;
+
 //save the pipe function for later
 var pipe = Stream.prototype.pipe;
 
 Request.prototype.pipe = function(dest, opts){
-	if(this._written){
+	if(this._body){
 		throw Error("Data was already emitted!");
 	}
 	else if(this._ended){
@@ -117,25 +92,64 @@ Request.prototype._prepareClose = function(){
 	});
 };
 
-var re_protocol = /^https?:/; //TODO: what about other protocols?
-var moveEvents = function(from, to){
-	for(var i in from._events){
-		if(typeof from._events[i] === "function"){
-			to.on(i, from._events[i]);
-		}
-		else for(var j = 0; j < from._events[i].length; j++){
-			to.on(i, from._events[i][j]);
-		}
-	}
-	from._events = to._events;
+Request.prototype._addListeners = function(){
+	var scope = this;
+	
+	this.on("error", function(err){
+		scope._cb(err);
+	});
+	
+	this.on("end", function(){
+		scope._ended = true;
+		scope._cb(null, scope.response, scope._body);
+	});
+	
+	this.on("data", function(chunk){
+		if(!scope._written) scope._written = true;
+		scope._body += chunk;
+	});
+	
+	this.on("redirect", function(location){
+		var options = scope._options,
+			method = options.uri.method;
+		
+		if(scope._redirected++ < (options.maxRedirects || 10)){
+			if(!re_protocol.test(location)){
+	    		location = url.resolve(options.uri, location);
+	    	}
+	    	
+	    	options.uri = url.parse(location);
+	    	options.uri.method = method;
+	    	
+	    	scope._createRequest(options);
+	    	scope._request.end();
+	    } else {
+	    	scope.emit("error", Error("Too many redirects"));
+	    }
+	});
+	
+	this.once("pipe", function(src){
+		if(!scope.writable){
+		 	scope.emit("error", Error("Can't write to socket!"));
+		 	return;
+		 }
+		 
+		 scope._close = false;
+		 var cb = function(){
+		 	scope._prepareClose();
+		 };
+		 src.on("end", cb);
+		 src.on("close", cb);
+		 
+		 scope.on("pipe", function(){
+		 	throw Error("There is already a pipe");
+		 });
+	});
 };
 
 Request.prototype._createRequest = function(options){
-	if(typeof options.uri === "string"){
-		options.uri = url.parse(options.uri);
-	}
-	else if(typeof options.uri !== "object"){
-		scope.emit("error", Error("No URI specified!"));
+	if(typeof options.uri !== "object"){
+		this.emit("error", Error("No URI specified!"));
 		return;
 	}
 	
@@ -143,40 +157,22 @@ Request.prototype._createRequest = function(options){
 	if(!options.uri.path) options.uri.path = options.uri.pathname;
 	
 	var req = protocols[options.uri.protocol];
-	if(!req) return scope.emit("error", Error("Unknown protocol: " + options.uri.protocol));
+	if(!req) return this.emit("error", Error("Unknown protocol: " + options.uri.protocol));
 	
 	var scope = this;
 	
 	this._request = req.request(options.uri, function(resp){
-		var method = options.uri.method;
-		
 		if( (options.followRedirects || typeof options.followRedirect === "undefined") && (resp.statusCode % 300 < 99) && !scope.writable && resp.headers.location){
-				if(!scope._redirected) scope._redirected = 0;
-				
-				scope._request.abort(); //close the socket
 				clearTimeout(scope._reqTimeout);
-				
+				scope._request.abort(); //close the socket
 				scope.emit("redirect", resp.headers.location);
-				
-				if(scope._redirected++ < (options.maxRedirects || 10)){
-					if(!re_protocol.test(resp.headers.location)){
-						resp.headers.location = url.resolve(options.uri, resp.headers.location);
-					}
-					
-					options.uri = url.parse(resp.headers.location);
-					options.uri.method = method;
-					
-					scope._createRequest(options);
-				} else {
-					scope.emit("error", Error("Too many redirects"));
-				}
 				return;
 		}
 		
 		//add some info to the scope
 		scope.response = {
 			location: url.format(options.uri),
-			statusCode: response.statusCode,
+			statusCode: resp.statusCode,
 			headers: resp.headers
 		};
 		
@@ -186,20 +182,20 @@ Request.prototype._createRequest = function(options){
 			resp.setEncoding(options.encoding);
 		}
 		
-		resp.on("data", function(chunk){
-			scope.emit("data", chunk);
-		}).on("end", function(){
+		resp.on("end", function(){
 			if(!scope._ended) scope.emit("end");
 		}).on("close", function(){
 			scope.emit("close");
 		}).on("error", function(err){
 			scope.emit("error", err);
+		}).on("data", function(chunk){
+			scope.emit("data", chunk);
 		});
 		
 		scope.emit("response", resp);
 	});
 	
-	if(!("timeout" in this._options) || this._options.timeout){
+	if(!("timeout" in options) || options.timeout){
 		this._reqTimeout = setTimeout(function(){
 			if(!scope._ended){
 				scope._request.abort();
@@ -207,11 +203,11 @@ Request.prototype._createRequest = function(options){
 				scope.emit("timeout");
 				scope.emit("error", Error("ETIMEDOUT"));
 			}
-		}, this._options.timeout || 1e4);
+		}, options.timeout || 1e4);
 	}
+	
+	return true;
 };
-
-Request.prototype.readable = true;
 
 Request.prototype.setEncoding = function(encoding){
 	//if we are connected, send the encoding to the response
@@ -227,7 +223,7 @@ Request.prototype.abort = function(){
 	this._request.abort();
 };
 Request.prototype.write = function(chunk){
-	if(!this.writable) throw Error("Ether request method doesn't support .write or request was sent!");
+	if(!this.writable) throw Error("Either request method doesn't support .write or request was sent!");
 	return this._request.write(chunk);
 };
 
