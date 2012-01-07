@@ -41,17 +41,17 @@ var re_protocol = /^https?:/; //TODO: what about other protocols?
 var Request = function(options, cb){
 	this._options = options;
 	this._cb = cb;
-	
+
 	this._ended = false;
 	this._redirected = 0;
 	this._resp = null;
 	this.response = null;
 	this._body = "";
-	
+
 	this.writable = options.uri.method === "POST" || options.uri.method === "PUT";
-	
+
 	this._addListeners();
-	
+
 	var scope = this;
 	process.nextTick(function(){
 		if(!scope._createRequest(options)) return;
@@ -94,53 +94,53 @@ Request.prototype._prepareClose = function(){
 
 Request.prototype._addListeners = function(){
 	var scope = this;
-	
+
 	this.on("error", function(err){
 		scope._cb(err);
 	});
-	
+
 	this.on("end", function(){
 		scope._ended = true;
 		scope._cb(null, scope.response, scope._body);
 	});
-	
+
 	this.on("data", function(chunk){
 		if(!scope._written) scope._written = true;
 		scope._body += chunk;
 	});
-	
+
 	this.on("redirect", function(location){
 		var options = scope._options,
 			method = options.uri.method;
-		
+
 		if(scope._redirected++ < (options.maxRedirects || 10)){
 			if(!re_protocol.test(location)){
-	    		location = url.resolve(options.uri, location);
-	    	}
-	    	
-	    	options.uri = url.parse(location);
-	    	options.uri.method = method;
-	    	
-	    	scope._createRequest(options);
-	    	scope._request.end();
-	    } else {
-	    	scope.emit("error", Error("Too many redirects"));
-	    }
+		 		location = url.resolve(options.uri, location);
+		 	}
+
+		 	options.uri = url.parse(location);
+		 	options.uri.method = method;
+
+		 	scope._createRequest(options);
+		 	scope._request.end();
+		 } else {
+		 	scope.emit("error", Error("Too many redirects"));
+		 }
 	});
-	
+
 	this.once("pipe", function(src){
 		if(!scope.writable){
 		 	scope.emit("error", Error("Can't write to socket!"));
 		 	return;
 		 }
-		 
+
 		 scope._close = false;
 		 var cb = function(){
 		 	scope._prepareClose();
 		 };
 		 src.on("end", cb);
 		 src.on("close", cb);
-		 
+
 		 scope.on("pipe", function(){
 		 	throw Error("There is already a pipe");
 		 });
@@ -152,15 +152,15 @@ Request.prototype._createRequest = function(options){
 		this.emit("error", Error("No URI specified!"));
 		return;
 	}
-	
+
 	//fix for node < 0.5
 	if(!options.uri.path) options.uri.path = options.uri.pathname;
-	
+
 	var req = protocols[options.uri.protocol];
 	if(!req) return this.emit("error", Error("Unknown protocol: " + options.uri.protocol));
-	
+
 	var scope = this;
-	
+
 	this._request = req.request(options.uri, function(resp){
 		if( (options.followRedirects || typeof options.followRedirect === "undefined") && (resp.statusCode % 300 < 99) && !scope.writable && resp.headers.location){
 				clearTimeout(scope._reqTimeout);
@@ -168,20 +168,20 @@ Request.prototype._createRequest = function(options){
 				scope.emit("redirect", resp.headers.location);
 				return;
 		}
-		
+
 		//add some info to the scope
 		scope.response = {
 			location: url.format(options.uri),
 			statusCode: resp.statusCode,
 			headers: resp.headers
 		};
-		
+
 		scope._resp = resp;
-		
+
 		if(options.encoding){
 			resp.setEncoding(options.encoding);
 		}
-		
+
 		resp.on("end", function(){
 			if(!scope._ended) scope.emit("end");
 		}).on("close", function(){
@@ -191,21 +191,21 @@ Request.prototype._createRequest = function(options){
 		}).on("data", function(chunk){
 			scope.emit("data", chunk);
 		});
-		
+
 		scope.emit("response", resp);
 	});
-	
+
 	if(!("timeout" in options) || options.timeout){
 		this._reqTimeout = setTimeout(function(){
 			if(!scope._ended){
 				scope._request.abort();
-				
+
 				scope.emit("timeout");
 				scope.emit("error", Error("ETIMEDOUT"));
 			}
 		}, options.timeout || 1e4);
 	}
-	
+
 	return true;
 };
 
