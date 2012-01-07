@@ -18,6 +18,15 @@ The most common library used to perform http(s)-requests in node is [request](ht
 * follows redirects
 * you may add your own protocols!
 
+###Options
+* `uri`: Object that's passed to http(s).request ([as described here](http://nodejs.org/docs/latest/api/all.html#http.request))
+* `followRedirect`: Boolean that indicates whether redirects should be followed
+* `maxRedirects`: int with the maximum number of redirects (defaults to 10)
+* `body`: that data that should be passed to the request
+* `encoding`: the encoding that all data should use (the body will always be a string)
+* `timeout`: a request times out if it passes this limit. Defaults to 10000 (read: 10 seconds)
+* `only2xx`: only permit status codes >= 200 and < 300 (otherwise, throw an error)
+
 -
 
 License: Public domain

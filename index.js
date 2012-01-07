@@ -26,16 +26,6 @@ module.exports.addProtocol = function(name, module){
 	protocols[name] = module;
 };
 
-/*
-* Options:
-*	uri: Object that's passed to http(s).request (http://nodejs.org/docs/latest/api/all.html#http.request)
-*	followRedirect: Boolean that indicates whether redirects should be followed
-*	maxRedirects: int with the maximum number of redirects (defaults to 10)
-*	body: that data that should be passed to the request
-*	encoding: the encoding that all data should use (the body will always be a string)
-*	timeout: a request times out if it passes this limit. Defaults to 10000 (read: 10 seconds)
-*/
-
 var re_protocol = /^https?:/; //TODO: what about other protocols?
 
 var Request = function(options, cb){
@@ -162,17 +152,24 @@ Request.prototype._createRequest = function(options){
 	var scope = this;
 
 	this._request = req.request(options.uri, function(resp){
-		if( (options.followRedirects || typeof options.followRedirect === "undefined") && (resp.statusCode % 300 < 99) && !scope.writable && resp.headers.location){
+		var statusCode = resp.statusCode;
+		
+		if( (!("followRedirect" in options) || options.followRedirect) && (statusCode % 300 < 99) && !scope.writable && resp.headers.location){
 				clearTimeout(scope._reqTimeout);
-				scope._request.abort(); //close the socket
+				scope.abort(); //close the socket
 				scope.emit("redirect", resp.headers.location);
 				return;
 		}
+		
+		if(options.only2xx && statusCode % 200 >= 100){
+			scope.emit("error", Error("Received status code " + statusCode + " (\"" + http.STATUS_CODES[statusCode] + "\")"));
+			scope.abort();
+		};
 
 		//add some info to the scope
 		scope.response = {
 			location: url.format(options.uri),
-			statusCode: resp.statusCode,
+			statusCode: statusCode,
 			headers: resp.headers
 		};
 
