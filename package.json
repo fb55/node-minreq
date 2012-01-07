@@ -1,6 +1,6 @@
 {
     "name": "minreq",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "description": "minimalistic request library",
     "author": "Felix Boehm <me@feedic.com>",
     "keywords": ["http", "https", "request", "stream"],

@@ -68,7 +68,8 @@ Request.prototype.pipe = function(dest, opts){
 	else if(this._ended){
 		throw Error("Request is closed!");
 	}
-	else pipe.call(this, dest, opts);
+	
+	return pipe.call(this, dest, opts);
 };
 
 Request.prototype._prepareClose = function(){
@@ -91,7 +92,7 @@ Request.prototype._addListeners = function(){
 
 	this.on("end", function(){
 		scope._ended = true;
-		scope._cb(null, scope.response, scope._body);
+		if(scope._cb) scope._cb(null, scope.response, scope._body);
 	});
 
 	this.on("data", function(chunk){
