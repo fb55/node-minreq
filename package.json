@@ -1,0 +1,13 @@
+{
+    "name": "minreq",
+    "version": "0.1.0",
+    "description": "minimalistic request library",
+    "author": "Felix Boehm <me@feedic.com>",
+    "keywords": ["http", "https", "request", "stream"],
+    "main": "./index.js",
+    "engine": "node >= 0.4.0",
+    "repository": {
+		  "type": "git"
+		, "url": "git://github.com/fb55/node-minreq.git"
+	}
+}
