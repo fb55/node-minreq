@@ -96,7 +96,6 @@ Request.prototype._addListeners = function(){
 	});
 
 	this.on("data", function(chunk){
-		if(!scope._written) scope._written = true;
 		scope._body += chunk;
 	});
 
