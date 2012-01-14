@@ -87,7 +87,7 @@ Request.prototype._addListeners = function(){
 	var scope = this;
 
 	this.on("error", function(err){
-		scope._cb(err);
+		if(scope._cb) scope._cb(err);
 	});
 
 	this.on("end", function(){
