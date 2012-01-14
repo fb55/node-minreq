@@ -192,6 +192,10 @@ Request.prototype._createRequest = function(options){
 		scope.emit("response", resp);
 	});
 
+	this._request.on("error", function(err){
+		scope.emit("error", err);
+	});
+
 	if(!("timeout" in options) || options.timeout){
 		this._reqTimeout = setTimeout(function(){
 			if(!scope._ended){
