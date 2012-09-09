@@ -38,9 +38,22 @@ var Request = function(options, cb){
 	this.response = null;
 	this._body = "";
 
+	//fix for node < 0.5
+	if( !("path" in options.uri) ) options.uri.path = options.uri.pathname;
+
 	this.writable = options.uri.method === "POST" || options.uri.method === "PUT";
 
 	this._addListeners();
+
+	if(typeof options.uri !== "object"){
+		this.emit("error", Error("No URI specified!"));
+		return;
+	}
+
+	if( !(options.uri.protocol in protocols) ){
+		this.emit("error", Error("Unknown protocol: " + options.uri.protocol));
+		return;
+	}
 
 	var scope = this;
 	process.nextTick(function(){
@@ -105,51 +118,41 @@ Request.prototype._addListeners = function(){
 
 		if(scope._redirected++ < (options.maxRedirects || 10)){
 			if(!re_protocol.test(location)){
-		 		location = url.resolve(options.uri, location);
-		 	}
+				location = url.resolve(options.uri, location);
+			}
 
-		 	options.uri = url.parse(location);
-		 	options.uri.method = method;
+			options.uri = url.parse(location);
+			options.uri.method = method;
 
-		 	scope._createRequest(options);
-		 	scope._request.end();
-		 } else {
-		 	scope.emit("error", Error("Too many redirects"));
+			scope._createRequest(options);
+			scope._request.end();
+		} else {
+			scope.emit("error", Error("Too many redirects"));
 		 }
 	});
 
 	this.once("pipe", function(src){
 		if(!scope.writable){
-		 	scope.emit("error", Error("Can't write to socket!"));
-		 	return;
-		 }
+			scope.emit("error", Error("Can't write to socket!"));
+			return;
+		}
 
 		 scope._close = false;
 		 var cb = function(){
-		 	scope._prepareClose();
+			scope._prepareClose();
 		 };
 		 src.on("end", cb);
 		 src.on("close", cb);
 
 		 scope.on("pipe", function(){
-		 	throw Error("There is already a pipe");
+			throw Error("There is already a pipe");
 		 });
 	});
 };
 
 Request.prototype._createRequest = function(options){
-	if(typeof options.uri !== "object"){
-		this.emit("error", Error("No URI specified!"));
-		return;
-	}
-
-	//fix for node < 0.5
-	if(!options.uri.path) options.uri.path = options.uri.pathname;
-
-	var req = protocols[options.uri.protocol];
-	if(!req) return this.emit("error", Error("Unknown protocol: " + options.uri.protocol));
-
-	var scope = this;
+	var req = protocols[options.uri.protocol],
+	    scope = this;
 
 	this._request = req.request(options.uri, function(resp){
 		var statusCode = resp.statusCode;
@@ -164,7 +167,7 @@ Request.prototype._createRequest = function(options){
 		if(options.only2xx && statusCode % 200 >= 100){
 			scope.emit("error", Error("Received status code " + statusCode + " (\"" + http.STATUS_CODES[statusCode] + "\")"));
 			scope.abort();
-		};
+		}
 
 		//add some info to the scope
 		scope.response = {
