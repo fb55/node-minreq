@@ -199,6 +199,12 @@ Request.prototype._createRequest = function(options){
 		scope.emit("error", err);
 	});
 
+	if(this._options.headers){
+		for(var header in this._options.headers){
+			this._request.setHeader(header, this._options.headers[header]);
+		}
+	}
+
 	if(!("timeout" in options) || options.timeout){
 		this._reqTimeout = setTimeout(function(){
 			if(!scope._ended){
@@ -229,6 +235,30 @@ Request.prototype.abort = function(){
 Request.prototype.write = function(chunk){
 	if(!this.writable) throw Error("Either request method doesn't support .write or request was sent!");
 	return this._request.write(chunk);
+};
+Request.prototype.setHeader = function(name, value){
+	if(arguments.length < 2) throw Error("wrong number of arguments");
+	if(this._request){
+		return this._request.setHeader(name, value);
+	}
+	if(typeof this._options.headers !== "object"){
+		this._options.headers = {__proto__: null};
+	}
+	this._options.headers[name.toLowerCase()] = value;
+};
+Request.prototype.getHeader = function(name){
+	if(arguments.length < 1) throw Error("wrong number of arguments");
+	if(this._request){
+		return this._request.getHeader(name);
+	}
+	return this._options.headers && this._options.headers[name.toLowerCase()];
+};
+Request.prototype.removeHeader = function(name){
+	if(arguments.length < 1) throw Error("wrong number of arguments");
+	if(this._request){
+		return this._request.removeHeader(name);
+	}
+	return this._options.headers && delete this._options.headers[name.toLowerCase()];
 };
 
 module.exports.Request = Request;
