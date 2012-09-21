@@ -38,6 +38,8 @@ var Request = function(options, cb){
 	this.response = null;
 	this._body = "";
 
+	if(typeof options.uri !== "object") options.uri = url.parse(options.uri);
+
 	//fix for node < 0.5
 	if( !("path" in options.uri) ) options.uri.path = options.uri.pathname;
 
