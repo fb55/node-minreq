@@ -36,9 +36,15 @@ var Request = function(options, cb){
 	this._redirected = 0;
 	this._resp = null;
 	this.response = null;
-	this._body = "";
+	this._body = new Buffer(0);
 
-	if(typeof options.uri !== "object") options.uri = url.parse(options.uri);
+
+	if(typeof options.uri === "string"){
+		options.uri = url.parse(options.uri);
+	} else if(typeof options.uri !== "object"){
+		this.emit("error", Error("No URI specified!"));
+		return;
+	}
 
 	//fix for node < 0.5
 	if( !("path" in options.uri) ) options.uri.path = options.uri.pathname;
@@ -46,11 +52,6 @@ var Request = function(options, cb){
 	this.writable = options.uri.method === "POST" || options.uri.method === "PUT";
 
 	this._addListeners();
-
-	if(typeof options.uri !== "object"){
-		this.emit("error", Error("No URI specified!"));
-		return;
-	}
 
 	if( !(options.uri.protocol in protocols) ){
 		this.emit("error", Error("Unknown protocol: " + options.uri.protocol));
@@ -103,16 +104,21 @@ Request.prototype._addListeners = function(){
 
 	this.on("error", function(err){
 		if(scope._cb) scope._cb(err);
+		scope._cb = null; //remove the cb
 	});
 
 	this.on("end", function(){
 		scope._ended = true;
-		if(scope._cb) scope._cb(null, scope.response, scope._body);
 	});
 
-	this.on("data", function(chunk){
-		scope._body += chunk;
-	});
+	if(this._cb){
+		this.on("data", function(chunk){
+			scope._body = Buffer.concat([scope._body, chunk]);
+		});
+		this.on("end", function(){
+			scope._cb(null, scope.response, scope._body);
+		});
+	}
 
 	this.on("redirect", function(location){
 		var options = scope._options,
@@ -226,10 +232,6 @@ Request.prototype.setEncoding = function(encoding){
 	if(this._resp) this._resp.setEncoding(encoding);
 	//else, safe it for later
 	else this._options.encoding = encoding;
-};
-Request.prototype.then = function(cb){
-	//for promise-like behavior
-	this._cb = cb;
 };
 Request.prototype.abort = function(){
 	this._request.abort();
