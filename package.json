@@ -1,6 +1,6 @@
 {
     "name": "minreq",
-    "version": "0.1.6",
+    "version": "0.2.0",
     "description": "minimalistic request library",
     "author": "Felix Boehm <me@feedic.com>",
     "keywords": ["http", "https", "request", "stream"],
@@ -9,5 +9,6 @@
     "repository": {
 		  "type": "git"
 		, "url": "git://github.com/fb55/node-minreq.git"
-	}
+	},
+    "license": "BSD-like"
 }
