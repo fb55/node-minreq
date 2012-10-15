@@ -27,6 +27,6 @@ The most common library used to perform http(s)-requests in node is [request](ht
 * `timeout`: a request times out if it passes this limit. Defaults to 10000 (read: 10 seconds)
 * `only2xx`: only permit status codes >= 200 and < 300 (otherwise, throw an error)
 
--
-
-License: Public domain
+###TODO
+* add documentation
+* ease adding other protocols
