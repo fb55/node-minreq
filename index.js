@@ -172,7 +172,7 @@ Request.prototype._createRequest = function(options){
 				return;
 		}
 		
-		if(options.only2xx && statusCode % 200 >= 100){
+		if(options.only2xx && (statusCode < 200 || statusCode >= 300)){
 			scope.emit("error", Error("Received status code " + statusCode + " (\"" + http.STATUS_CODES[statusCode] + "\")"));
 			scope.abort();
 		}
