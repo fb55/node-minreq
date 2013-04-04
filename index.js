@@ -116,7 +116,9 @@ Request.prototype._addListeners = function(){
 			scope._body = Buffer.concat([scope._body, chunk]);
 		});
 		this.on("end", function(){
-			scope._cb(null, scope.response, scope._body);
+			if(scope._cb){
+				scope._cb(null, scope.response, scope._body);
+			}
 		});
 	}
 
