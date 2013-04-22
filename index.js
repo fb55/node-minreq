@@ -18,6 +18,8 @@ module.exports = function(options, cb){
 	};
 });
 
+module.exports.Request = Request;
+
 var protocols = {
 	"http:": http,
 	"https:": https
@@ -28,7 +30,7 @@ module.exports.addProtocol = function(name, module){
 
 var re_protocol = /^https?:/; //TODO: what about other protocols?
 
-var Request = function(options, cb){
+function Request(options, cb){
 	this._options = options;
 	this._cb = cb;
 
@@ -78,7 +80,7 @@ Request.prototype.readable = true;
 var pipe = Stream.prototype.pipe;
 
 Request.prototype.pipe = function(dest, opts){
-	if(this._body){
+	if(this._request){
 		throw Error("Data was already emitted!");
 	}
 	else if(this._ended){
@@ -138,7 +140,7 @@ Request.prototype._addListeners = function(){
 			scope._request.end();
 		} else {
 			scope.emit("error", Error("Too many redirects"));
-		 }
+		}
 	});
 
 	this.once("pipe", function(src){
@@ -147,16 +149,16 @@ Request.prototype._addListeners = function(){
 			return;
 		}
 
-		 scope._close = false;
-		 var cb = function(){
+		scope._close = false;
+		var cb = function(){
 			scope._prepareClose();
-		 };
-		 src.on("end", cb);
-		 src.on("close", cb);
+		};
+		src.on("end", cb);
+		src.on("close", cb);
 
-		 scope.on("pipe", function(){
+		scope.on("pipe", function(){
 			throw Error("There is already a pipe");
-		 });
+		});
 	});
 };
 
@@ -167,11 +169,17 @@ Request.prototype._createRequest = function(options){
 	this._request = req.request(options.uri, function(resp){
 		var statusCode = resp.statusCode;
 		
-		if( (!("followRedirect" in options) || options.followRedirect) && (statusCode % 300 < 99) && !scope.writable && resp.headers.location){
-				clearTimeout(scope._reqTimeout);
-				scope.abort(); //close the socket
-				scope.emit("redirect", resp.headers.location);
-				return;
+		if(
+			( !("followRedirect" in options) || options.followRedirect ) &&
+			statusCode >= 300 &&
+			statusCode < 400 &&
+			!scope.writable &&
+			resp.headers.location
+		){
+			clearTimeout(scope._reqTimeout);
+			scope.abort(); //close the socket
+			scope.emit("redirect", resp.headers.location);
+			return;
 		}
 		
 		if(options.only2xx && (statusCode < 200 || statusCode >= 300)){
@@ -266,5 +274,3 @@ Request.prototype.removeHeader = function(name){
 	}
 	return this._options.headers && delete this._options.headers[name.toLowerCase()];
 };
-
-module.exports.Request = Request;
