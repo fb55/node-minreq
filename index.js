@@ -35,6 +35,7 @@ function Request(options, cb){
 	this._cb = cb;
 
 	this._ended = false;
+	this._written = false;
 	this._redirected = 0;
 	this._resp = null;
 	this.response = null;
@@ -45,6 +46,11 @@ function Request(options, cb){
 		options.uri = url.parse(options.uri);
 	} else if(typeof options.uri !== "object"){
 		this.emit("error", Error("No URI specified!"));
+		return;
+	}
+
+	if(!(options.uri.protocol in protocols)){
+		this.emit("error", Error("protocol '" + options.uri.protocol + "' not supported"));
 		return;
 	}
 
@@ -69,7 +75,7 @@ function Request(options, cb){
 			scope._prepareClose();
 		}
 	});
-};
+}
 
 var Stream = require("stream").Stream;
 require("util").inherits(Request, Stream);
@@ -80,8 +86,8 @@ Request.prototype.readable = true;
 var pipe = Stream.prototype.pipe;
 
 Request.prototype.pipe = function(dest, opts){
-	if(this._request){
-		throw Error("Data was already emitted!");
+	if(this._written){
+		throw Error("data was already emitted!");
 	}
 	else if(this._ended){
 		throw Error("Request is closed!");
@@ -150,15 +156,17 @@ Request.prototype._addListeners = function(){
 		}
 
 		scope._close = false;
-		var cb = function(){
-			scope._prepareClose();
-		};
+
 		src.on("end", cb);
 		src.on("close", cb);
 
 		scope.on("pipe", function(){
-			throw Error("There is already a pipe");
+			this.emit("error", Error("data is already piped"));
 		});
+
+		function cb(){
+			scope._prepareClose();
+		}
 	});
 };
 
@@ -183,7 +191,10 @@ Request.prototype._createRequest = function(options){
 		}
 		
 		if(options.only2xx && (statusCode < 200 || statusCode >= 300)){
-			scope.emit("error", Error("Received status code " + statusCode + " (\"" + http.STATUS_CODES[statusCode] + "\")"));
+			scope.emit(
+				"error",
+				Error("Received status code " + statusCode + " (\"" + http.STATUS_CODES[statusCode] + "\")")
+			);
 			scope.abort();
 		}
 
@@ -208,6 +219,8 @@ Request.prototype._createRequest = function(options){
 			scope.emit("error", err);
 		}).on("data", function(chunk){
 			scope.emit("data", chunk);
+		}).once("data", function(){
+			scope._written = true;
 		});
 
 		scope.emit("response", resp);
